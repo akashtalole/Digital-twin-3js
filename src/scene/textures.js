@@ -121,3 +121,18 @@ function roundRect(g, x, y, w, h, r) {
   g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
   g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
 }
+
+export function dronePadTexture(label) {
+  return canvas(256, 256, (g, w, h) => {
+    g.fillStyle = '#2b3448'; roundRect(g, 0, 0, w, h, 26); g.fill();
+    g.strokeStyle = '#f2b21b'; g.lineWidth = 10;
+    g.beginPath(); g.arc(w / 2, h / 2, w * 0.36, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#ffffff';
+    g.font = '800 104px "Plus Jakarta Sans", system-ui, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('H', w / 2, h / 2 + 4);
+    g.font = '700 26px "Plus Jakarta Sans", system-ui, sans-serif';
+    g.fillStyle = '#c9d3e6';
+    g.fillText(label, w / 2, h - 22);
+  });
+}

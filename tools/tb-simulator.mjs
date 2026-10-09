@@ -44,6 +44,7 @@ const post = (token, kind, body) => fetch(`${HOST}/api/v1/${token}/${kind}`, {
 const STATIC = {
   forklift: ['operator', 'model'],
   truck: ['carrier'],
+  drone: ['model', 'pad'],
   dock: ['code', 'name', 'kind', 'index'],
   charger: ['code', 'index'],
   site: ['code', 'name', 'capacity'],
@@ -64,6 +65,7 @@ function entities(snap) {
     { name: SITE.code, type: 'site', label: SITE.name, data: snap.site },
     ...snap.forklifts.map((f) => ({ name: f.id, type: 'forklift', label: `${f.model} · ${f.operator}`, data: f })),
     ...snap.trucks.map((t) => ({ name: t.id, type: 'truck', label: t.carrier, data: t })),
+    ...snap.drones.map((d) => ({ name: d.id, type: 'drone', label: d.model, data: d })),
     ...snap.docks.map((d) => ({ name: `${SITE.code}-${d.id}`, type: 'dock', label: d.name, data: { ...d, code: d.id } })),
     ...snap.chargers.map((c) => ({ name: `${SITE.code}-${c.id}`, type: 'charger', label: `Charger ${c.id}`, data: { ...c, code: c.id } })),
   ];

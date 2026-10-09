@@ -43,3 +43,9 @@ export const dockLabel = (i) => (i < 3 ? `In ${i + 1}` : `Out ${i - 2}`);
 export const dockKind = (i) => (i < 3 ? 'inbound' : 'outbound');
 
 export const headingFrom = (dx, dz) => Math.atan2(-dz, dx);
+
+// Drone hub: landing pads behind the charging bay, by the back fence.
+export const DRONE_COUNT = 3;
+export const DRONE_PAD_Z = -48.5;
+export const dronePadX = (i) => -28.5 + i * 4.2;
+export const DRONE_CRUISE = 16; // patrol altitude (m)

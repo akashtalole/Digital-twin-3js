@@ -1,7 +1,7 @@
 // Low-poly procedural models: forklift, truck, charger, pallets, props.
 // Every model faces local +X (forks / cab forward), matching the simulator heading.
 import * as THREE from 'three';
-import { cartonTexture, trailerTexture, labelTexture, glowTexture } from './textures.js';
+import { cartonTexture, trailerTexture, labelTexture, glowTexture, dronePadTexture } from './textures.js';
 
 const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.05, ...extra });
 
@@ -164,6 +164,81 @@ export function createTree(scale = 1) {
   crown.position.y = 2.3; crown.castShadow = true;
   g.add(trunk, crown);
   g.scale.setScalar(scale);
+  return g;
+}
+
+export function createDrone() {
+  const g = new THREE.Group();
+  const frame = new THREE.Group(); // tilts with acceleration
+  g.add(frame);
+  frame.add(box(0.72, 0.22, 0.44, MAT.white, 0, 0, 0));
+  frame.add(box(0.46, 0.08, 0.32, MAT.black, -0.04, 0.15, 0));
+  const armMat = MAT.black;
+  for (const a of [Math.PI / 4, -Math.PI / 4]) {
+    const arm = box(1.6, 0.06, 0.09, armMat, 0, 0.02, 0);
+    arm.rotation.y = a;
+    frame.add(arm);
+  }
+  const rotors = [];
+  const discMat = new THREE.MeshBasicMaterial({ color: '#9aa5b8', transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
+  for (const [x, z] of [[0.56, 0.56], [0.56, -0.56], [-0.56, 0.56], [-0.56, -0.56]]) {
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.14, 12), MAT.black);
+    motor.position.set(x, 0.07, z);
+    frame.add(motor);
+    const rotor = new THREE.Group();
+    rotor.position.set(x, 0.16, z);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), discMat);
+    disc.rotation.x = -Math.PI / 2;
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.015, 0.06), MAT.steel);
+    rotor.add(disc, blade);
+    frame.add(rotor);
+    rotors.push(rotor);
+  }
+  const gimbal = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), MAT.glass);
+  gimbal.position.set(0.3, -0.16, 0);
+  frame.add(gimbal);
+  for (const z of [0.16, -0.16]) {
+    frame.add(box(0.05, 0.22, 0.05, MAT.black, 0.12, -0.2, z), box(0.05, 0.22, 0.05, MAT.black, -0.16, -0.2, z));
+    frame.add(box(0.5, 0.04, 0.05, MAT.black, -0.02, -0.31, z));
+  }
+  const led = (color, x) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1 }));
+    m.position.set(x, 0, 0);
+    frame.add(m);
+    return m;
+  };
+  led('#3ccf7a', 0.37);
+  const tail = led('#ff5a5a', -0.37);
+  // Downward scan cone; scaled to the drone's altitude every frame.
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 1, 32, 1, true),
+    new THREE.MeshBasicMaterial({ color: '#4f7dff', transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  cone.geometry.translate(0, -0.5, 0); // apex at the drone, base on the ground
+  cone.visible = false;
+  g.add(cone);
+  g.traverse((o) => { if (o.isMesh && o !== cone) o.castShadow = true; });
+  cone.castShadow = false;
+  // Drawn ~1.8× real size so the drones read at yard scale, like the rest of the stylised scene.
+  frame.scale.setScalar(1.8);
+  g.userData = { frame, rotors, cone, tail, height: 1.0 };
+  return g;
+}
+
+export function createDronePad(label) {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.12, 3.6), MAT.concrete);
+  base.position.y = 0.06; base.receiveShadow = true;
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), new THREE.MeshStandardMaterial({ map: dronePadTexture(label), roughness: 0.8 }));
+  top.rotation.x = -Math.PI / 2; top.position.y = 0.125; top.receiveShadow = true;
+  g.add(base, top);
+  const lightMat = new THREE.MeshStandardMaterial({ color: '#3ccf7a', emissive: '#3ccf7a', emissiveIntensity: 0.8 });
+  for (const [x, z] of [[1.65, 1.65], [1.65, -1.65], [-1.65, 1.65], [-1.65, -1.65]]) {
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), lightMat);
+    l.position.set(x, 0.17, z);
+    g.add(l);
+  }
+  g.userData = { lightMat };
   return g;
 }
 

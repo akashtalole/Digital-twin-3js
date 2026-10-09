@@ -1,11 +1,11 @@
 // ThingsBoard live data source.
 //  1. REST login (/api/auth/login) or a pasted JWT.
-//  2. Device discovery by device type: forklift, truck, dock, charger, site.
+//  2. Device discovery by device type: forklift, truck, drone, dock, charger, site.
 //  3. WebSocket subscription to LATEST_TELEMETRY + CLIENT_SCOPE attributes.
 //  4. Each device's latest values are merged into the same snapshot shape the
 //     simulator produces, so the 3D scene and UI don't care where data comes from.
 
-export const DEVICE_TYPES = ['forklift', 'truck', 'dock', 'charger', 'site'];
+export const DEVICE_TYPES = ['forklift', 'truck', 'drone', 'dock', 'charger', 'site'];
 
 export class ThingsBoardSource {
   constructor({ host, username, password, token, wsApi = 'auto' }) {
@@ -92,7 +92,7 @@ export class ThingsBoardSource {
       }
     }
     if (!this.devices.size) {
-      throw new Error('No devices of type forklift, truck, dock, charger or site were found. Run tools/tb-simulator.mjs to create them.');
+      throw new Error('No devices of type forklift, truck, drone, dock, charger or site were found. Run tools/tb-simulator.mjs to create them.');
     }
     if (this.refreshToken) this.refreshTimer = setInterval(() => this.#refresh().catch(() => {}), 45 * 60 * 1000);
     await this.#openSocket();
@@ -173,6 +173,7 @@ export class ThingsBoardSource {
     const sv = site?.values || {};
     const forklifts = by('forklift').map((d) => ({ id: d.name, type: 'forklift', name: d.name, tbId: d.id, ...d.values }));
     const trucks = by('truck').map((d) => ({ id: d.name, type: 'truck', name: d.name, tbId: d.id, ...d.values, onSite: !!d.values.onSite }));
+    const drones = by('drone').map((d) => ({ id: d.name, type: 'drone', name: d.name, tbId: d.id, ...d.values, airborne: !!d.values.airborne, scanning: !!d.values.scanning }));
     const docks = by('dock').map((d) => {
       const code = d.values.code || d.name.split('-').pop();
       return { ...d.values, id: code, type: 'dock', tbId: d.id, name: d.values.name || d.label || code, index: num(d.values.index, Number(code.slice(1)) - 1) };
@@ -190,7 +191,7 @@ export class ThingsBoardSource {
         onTimeDelivery: num(sv.onTimeDelivery, 0), onTimeDelta: num(sv.onTimeDelta, 0), utilisation: num(sv.utilisation, 0),
         docksOccupied: num(sv.docksOccupied, docks.filter((d) => d.truck).length), docksTotal: docks.length,
       },
-      forklifts, trucks, docks, chargers,
+      forklifts, trucks, drones, docks, chargers,
     };
   }
 

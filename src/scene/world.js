@@ -3,11 +3,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   BUILDING, DOCK_COUNT, DOCK_SPACING, dockZ, ROAD_X, ROAD_WIDTH, LANE_X, TRAILER_REAR_X,
-  CHARGER_COUNT, chargerX, CHARGER_Z, IDLE_Z, idleX,
+  CHARGER_COUNT, chargerX, CHARGER_Z, IDLE_Z, idleX, DRONE_COUNT, DRONE_PAD_Z, dronePadX,
 } from '../model/layout.js';
 import { corrugatedTexture, rollerDoorTexture, roadTexture, labelTexture, signTexture } from './textures.js';
 import {
-  MAT, createForklift, createTruck, createCharger, createTree, createPin, createSelectionRing, palletStack,
+  MAT, createForklift, createTruck, createCharger, createTree, createPin, createSelectionRing, palletStack, createDrone, createDronePad,
 } from './models.js';
 
 const HOME = { target: new THREE.Vector3(-6, 0, -9), radius: 108, polar: 0.92, azimuth: -0.82 };
@@ -222,6 +222,15 @@ export class World {
       this.#register(`C${i + 1}`, 'charger', c, { height: 1.8 });
     }
 
+    // Drone hub
+    this.dronePads = [];
+    for (let i = 0; i < DRONE_COUNT; i++) {
+      const pad = createDronePad(`P${i + 1}`);
+      pad.position.set(dronePadX(i), 0, DRONE_PAD_Z);
+      this.scene.add(pad);
+      this.dronePads.push(pad);
+    }
+
     // Staging area for idle forklifts
     const staging = new THREE.MeshStandardMaterial({ color: '#dfe7fb', roughness: 1, transparent: true, opacity: 0.8 });
     this.stagingMat = staging;
@@ -296,6 +305,12 @@ export class World {
       e.data = d;
       const door = this.doors[d.index ?? Number(d.id.slice(1)) - 1];
       if (door) { door.target = num(d.doorOpen, 0); door.occupied = !!d.truck; }
+    }
+    for (const d of snapshot.drones || []) {
+      const e = this.#ensure(d.id, 'drone', createDrone);
+      e.data = d;
+      e.target = { x: num(d.x, 0), y: num(d.altitude, 0.3), z: num(d.z, 0), h: num(d.heading, 0) };
+      if (!e.seen) { e.obj.position.set(e.target.x, e.target.y, e.target.z); e.obj.rotation.y = e.target.h; e.seen = true; }
     }
     for (const c of snapshot.chargers || []) {
       const e = this.entities.get(c.id);
@@ -441,6 +456,33 @@ export class World {
         beacon.material.color.set(col); beacon.material.emissive.set(col);
         beacon.material.emissiveIntensity = 0.6 + 0.4 * Math.sin(time * 5 + e.id.length);
       }
+      if (e.kind === 'drone' && e.target) {
+        const o = e.obj;
+        const { frame, rotors, cone, tail } = o.userData;
+        const before = o.position.clone();
+        o.position.x += (e.target.x - o.position.x) * k;
+        o.position.y += (e.target.y - o.position.y) * k;
+        o.position.z += (e.target.z - o.position.z) * k;
+        o.rotation.y += shortest(o.rotation.y, e.target.h) * k;
+        if (this.follow && this.selected === e.id && !this.tween) {
+          const d = o.position.clone().sub(before);
+          this.camera.position.add(d); this.controls.target.add(d);
+        }
+        const flying = !!e.data?.airborne;
+        const spin = flying ? 60 : (o.position.y > 0.45 ? 30 : 0);
+        for (const r of rotors) r.rotation.y += spin * dt;
+        // Pitch into the direction of travel, plus a gentle hover bob.
+        const v = before.distanceTo(o.position) / Math.max(dt, 1e-3);
+        frame.rotation.z += (-Math.min(v, 8) * 0.035 - frame.rotation.z) * Math.min(1, dt * 4);
+        frame.position.y = (flying ? Math.sin(time * 2.6 + e.id.length) * 0.08 : 0) + 0.4;
+        cone.visible = !!e.data?.scanning && o.position.y > 1.5;
+        if (cone.visible) {
+          const hgt = o.position.y;
+          cone.scale.set(hgt * 0.42, hgt, hgt * 0.42);
+          cone.material.opacity = 0.12 + 0.06 * Math.sin(time * 6);
+        }
+        tail.material.emissiveIntensity = flying ? (Math.sin(time * 8) > 0 ? 1.2 : 0.1) : 0.4;
+      }
       if (e.kind === 'charger') {
         const busy = !!e.data?.busy;
         const { screen, pad } = e.obj.userData;
@@ -463,12 +505,12 @@ export class World {
     const sel = this.selected && this.entities.get(this.selected);
     if (sel && sel.obj.visible) {
       const p = this.#entityPos(sel);
-      const radius = sel.kind === 'truck' ? 7.6 : sel.kind === 'dock' ? 3.4 : 2.0;
+      const radius = sel.kind === 'truck' ? 7.6 : sel.kind === 'dock' ? 3.4 : sel.kind === 'drone' ? 1.5 : 2.0;
       this.ring.visible = true;
       this.ring.position.set(p.x, 0.04, p.z);
       this.ring.scale.setScalar(radius * (1 + 0.04 * Math.sin(time * 3)));
       this.pin.visible = true;
-      this.pin.position.set(p.x, sel.height + 1.2 + Math.sin(time * 2.2) * 0.25, p.z);
+      this.pin.position.set(p.x, p.y + sel.height + 1.2 + Math.sin(time * 2.2) * 0.25, p.z);
       this.pin.rotation.y = time * 0.8;
     } else {
       this.ring.visible = false; this.pin.visible = false;

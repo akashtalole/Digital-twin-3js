@@ -8,6 +8,7 @@ const ICONS = {
   forklift: '<svg viewBox="0 0 24 24"><path d="M4 18V9h5l3 5v4"/><path d="M4 9V5h4l1 4"/><path d="M16 4v14h5"/><circle cx="6.5" cy="18.5" r="1.8"/><circle cx="12" cy="18.5" r="1.8"/></svg>',
   truck: '<svg viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 9h4l3 3.5V16h-7z"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>',
   dock: '<svg viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13"/><path d="M7 21v-9h10v9M7 15h10M7 18h10"/></svg>',
+  drone: '<svg viewBox="0 0 24 24"><rect x="9" y="10" width="6" height="4" rx="1.5"/><path d="M9 10 6 7M15 10l3-3M9 14l-3 3M15 14l3 3"/><path d="M3 6h6M15 6h6M3 18h6M15 18h6"/></svg>',
   charger: '<svg viewBox="0 0 24 24"><rect x="5" y="3" width="10" height="18" rx="2"/><path d="m11 7-3 5h4l-3 5M15 10h3v6a2 2 0 0 0 2 2"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   locate: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
@@ -26,6 +27,8 @@ const PILL = {
   Unloading: 'ok', Loading: 'accent', Charging: 'warn', 'To charger': 'warn', Idle: '',
   'En route': 'accent', Arriving: 'accent', Waiting: 'bad', Sealing: '', Departing: '', 'Off site': '',
   Occupied: 'accent', Free: 'ok',
+  Patrolling: 'accent', Scanning: 'ok', Inspecting: 'ok', 'In flight': 'accent', 'Taking off': 'accent',
+  Returning: '', Landing: '', Docked: '',
 };
 const pill = (status) => `<span class="pill ${PILL[status] ?? ''}">${esc(status)}</span>`;
 const batteryClass = (b) => (b < 20 ? 'bad' : b < 40 ? 'warn' : '');
@@ -71,7 +74,7 @@ export class UI {
   #all() {
     const s = this.snapshot;
     if (!s) return [];
-    return [...s.forklifts, ...s.trucks, ...s.docks, ...s.chargers];
+    return [...s.forklifts, ...s.trucks, ...(s.drones || []), ...s.docks, ...s.chargers];
   }
 
   find(id) { return this.#all().find((e) => e.id === id) || null; }
@@ -161,6 +164,18 @@ export class UI {
       task = e.truck ? `${e.truck} at door` : 'Ready for next truck';
       meter = `<div class="meter"><div class="bar"><i class="accent" style="width:${(Number(e.doorOpen) || 0) * 100}%"></i></div><span class="num">Door ${Number(e.doorOpen) > 0.95 ? 'open' : Number(e.doorOpen) < 0.05 ? 'closed' : 'moving'}</span></div>`;
       rows = [['Truck', e.truck ? link(e.truck) : '—'], ['Forklifts working', e.forklifts ?? 0], ['Direction', e.kind]];
+    } else if (e.type === 'drone') {
+      eyebrow = `Drone · ${site}`;
+      sub = `${e.model || 'Inspection drone'} · pad ${e.pad || '—'}`;
+      const b = Number(e.battery) || 0;
+      meter = `<div class="meter"><div class="bar"><i class="${batteryClass(b)}" style="width:${b}%"></i></div><span class="num">Battery ${pct(b)}</span></div>`;
+      rows = [
+        ['Mission', e.mission || 'None'],
+        ['Altitude', `${Number(e.altitude || 0).toFixed(1)} m`],
+        ['Speed', `${Number(e.speed || 0).toFixed(1)} km/h`],
+        e.target ? ['Inspecting', link(e.target)] : ['Home pad', e.pad || '—'],
+        ['Scans today', e.scansToday ?? 0],
+      ];
     } else {
       eyebrow = `Charger · ${site}`;
       sub = 'Forklift charging bay';
@@ -196,6 +211,7 @@ export class UI {
     const sel = this.selected && this.find(this.selected);
     let truck = sel?.type === 'truck' ? sel : null;
     if (!truck && sel?.type === 'forklift' && sel.truck) truck = s.trucks.find((t) => t.id === sel.truck);
+    if (!truck && sel?.type === 'drone' && sel.target) truck = s.trucks.find((t) => t.id === sel.target);
     if (!truck && sel?.type === 'dock' && sel.truck) truck = s.trucks.find((t) => t.id === sel.truck);
     truck ||= s.trucks.find((t) => t.phase === 'unloading' || t.status === 'Unloading')
       || s.trucks.find((t) => t.onSite) || s.trucks.find((t) => t.status === 'En route');
@@ -234,6 +250,8 @@ export class UI {
     $('#tab-dock').textContent = `${s.docks.filter((d) => d.truck).length}/${s.docks.length}`;
     $('#tab-forklift').textContent = `${working}/${s.forklifts.length}`;
     $('#tab-truck').textContent = s.trucks.filter((t) => t.onSite).length;
+    const drones = s.drones || [];
+    $('#tab-drone').textContent = `${drones.filter((d) => d.airborne).length}/${drones.length}`;
     let rows = '';
     if (this.tab === 'forklift') {
       rows = s.forklifts.map((f) => row(f.id, f.id, s.site.code, f.task, f.status,
@@ -243,6 +261,9 @@ export class UI {
       rows = s.trucks.filter((t) => t.status !== 'Off site').sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
         .map((t) => row(t.id, t.id, t.dir === 'outbound' ? 'Outbound' : 'Inbound', t.task, t.status,
           `<span class="num">${t.moved}/${t.pallets}</span><div class="bar"><i class="accent" style="width:${t.pallets ? (t.moved / t.pallets) * 100 : 0}%"></i></div>`, this.selected)).join('');
+    } else if (this.tab === 'drone') {
+      rows = drones.map((d) => row(d.id, d.id, d.airborne ? `${Math.round(d.altitude)} m` : `Pad ${d.pad}`, d.task, d.status,
+        `<span class="num">${pct(d.battery)}</span><div class="bar"><i class="${batteryClass(d.battery)}" style="width:${d.battery}%"></i></div>`, this.selected)).join('');
     } else {
       rows = s.docks.map((d) => row(d.id, d.name, d.id, d.truck ? `${d.truck} · ${d.forklifts} forklift${d.forklifts === 1 ? '' : 's'}` : 'Ready for next truck',
         d.truck ? 'Occupied' : 'Free', `<span>Door ${Math.round(d.doorOpen * 100)}%</span><div class="bar"><i class="accent" style="width:${d.doorOpen * 100}%"></i></div>`, this.selected)).join('');
@@ -254,6 +275,9 @@ export class UI {
     const alerts = [];
     for (const f of s.forklifts) {
       if (f.battery < 25 && f.status !== 'Charging' && f.status !== 'To charger') alerts.push({ id: f.id, bad: true, text: `${f.id} battery at ${pct(f.battery)}`, sub: f.task });
+    }
+    for (const d of s.drones || []) {
+      if (d.airborne && d.battery < 25) alerts.push({ id: d.id, bad: true, text: `${d.id} returning on low battery (${pct(d.battery)})`, sub: d.task });
     }
     for (const t of s.trucks) if (t.status === 'Waiting') alerts.push({ id: t.id, text: `${t.id} is waiting for a dock`, sub: `${t.dir} · ${t.carrier || ''}` });
     if (s.site.utilisation >= 90) alerts.push({ id: null, text: `${s.site.code} is ${s.site.utilisation}% full`, sub: 'Consider holding inbound trucks' });
@@ -334,8 +358,8 @@ export class UI {
       if (!q || !this.snapshot) { results.hidden = true; return; }
       const items = this.#all().map((e) => ({
         id: e.id, kind: e.type, title: e.type === 'dock' ? `${e.name} (${e.id})` : e.id,
-        sub: e.type === 'truck' ? `#${e.shipment?.id || ''} · ${e.status}` : e.type === 'forklift' ? `${e.operator} · ${e.status}` : e.task || '',
-        hay: [e.id, e.name, e.operator, e.carrier, e.task, e.shipment?.id, e.shipment?.from, e.shipment?.to].join(' ').toLowerCase(),
+        sub: e.type === 'truck' ? `#${e.shipment?.id || ''} · ${e.status}` : e.type === 'forklift' ? `${e.operator} · ${e.status}` : e.type === 'drone' ? `${e.mission || 'On pad'} · ${e.status}` : e.task || '',
+        hay: [e.id, e.name, e.operator, e.carrier, e.task, e.mission, e.model, e.shipment?.id, e.shipment?.from, e.shipment?.to].join(' ').toLowerCase(),
       }));
       matches = items.filter((i) => i.hay.includes(q)).slice(0, 8);
       results.innerHTML = matches.length

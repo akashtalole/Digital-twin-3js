@@ -2,7 +2,7 @@
 
 A live 3D digital twin of a cross-dock warehouse yard, built with **three.js** and fed by **ThingsBoard** IoT telemetry.
 
-It shows the yard in 3D: the warehouse with six dock doors, trucks reversing into bays, forklifts shuttling pallets, and a charging bay. A control-room HUD sits on top with KPIs, a detail card, shipment tracking, a fleet list, search and alerts.
+It shows the yard in 3D: the warehouse with six dock doors, trucks reversing into bays, forklifts shuttling pallets, a charging bay, and inspection drones flying patrol, dock-scan and trailer-inspection missions from their own landing pads. A control-room HUD sits on top with KPIs, a detail card, shipment tracking, a fleet list, search and alerts.
 
 ![Twin overview](docs/overview.png)
 
@@ -27,17 +27,18 @@ The page opens in **Demo** mode with a built-in simulator. To switch to live dat
 TB_HOST=http://localhost:8080 TB_USER=tenant@thingsboard.org TB_PASS=tenant npm run simulate
 ```
 
-It creates 22 devices:
+It creates 25 devices:
 
 | Device type | Names | Client attributes | Telemetry keys |
 |---|---|---|---|
 | `site` | `WH-04` | `code`, `name`, `capacity` | `stockOnHand`, `stockDelta`, `trucksOnSite`, `trucksInbound`, `onTimeDelivery`, `onTimeDelta`, `utilisation`, `docksOccupied`, `docksTotal` |
 | `forklift` | `FL-10` … `FL-14` | `operator`, `model` | `status`, `task`, `battery`, `speed`, `carrying`, `load`, `movesToday`, `x`, `z`, `heading`, `charger`, `truck`, `dock` |
 | `truck` | `TRK-2205` … | `carrier` | `status`, `phase`, `task`, `dir`, `onSite`, `dock`, `x`, `z`, `heading`, `speed`, `pallets`, `moved`, `forklifts`, `eta`, `doneAt`, `shipment` (JSON) |
+| `drone` | `DR-01` … `DR-03` | `model`, `pad` | `status`, `task`, `mission`, `battery`, `altitude`, `speed`, `x`, `z`, `heading`, `scansToday`, `airborne`, `scanning`, `target` |
 | `dock` | `WH-04-D1` … `D6` | `code`, `name`, `kind`, `index` | `doorOpen` (0–1), `truck`, `forklifts` |
 | `charger` | `WH-04-C1` … `C4` | `code`, `index` | `busy`, `forklift` |
 
-Positions are in yard metres (`x` towards the warehouse, `z` along the façade). `heading` is in radians, with 0 pointing towards the warehouse. With real hardware, map your RTLS, telematics or PLC data to these keys, for example with a Rule Chain script node, and the twin picks them up unchanged.
+Positions are in yard metres (`x` towards the warehouse, `z` along the façade). `heading` is in radians, with 0 pointing towards the warehouse. Drone `altitude` is metres above the yard. With real hardware, map your RTLS, telematics or PLC data to these keys, for example with a Rule Chain script node, and the twin picks them up unchanged.
 
 ### 2. Point the twin at your server
 
@@ -76,5 +77,5 @@ tools/build.mjs          assembles index.html (and dist/artifact.html)
 ## Controls
 
 - Drag to orbit, right-drag to pan, scroll to zoom. The camera buttons also zoom, rotate and reset the view.
-- Click any forklift, truck, dock door or charger to open its card. The **target** button follows it as it moves.
-- Press <kbd>/</kbd> to search by device, operator, carrier, shipment or partner.
+- Click any forklift, truck, drone, dock door or charger to open its card. The **target** button follows it as it moves.
+- Press <kbd>/</kbd> to search by device, operator, carrier, drone mission, shipment or partner.

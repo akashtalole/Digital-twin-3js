@@ -4,7 +4,8 @@
 import {
   SITE, DOCK_COUNT, dockZ, dockLabel, dockKind, ROAD_X, LANE_X, TRUCK_PARK_X,
   PICK_TRAILER_X, PICK_DOOR_X, CHARGER_COUNT, chargerX, CHARGER_SPOT_Z,
-  CHARGER_APPROACH_Z, IDLE_Z, idleX, headingFrom,
+  CHARGER_APPROACH_Z, IDLE_Z, idleX, headingFrom, BUILDING, TRAILER_REAR_X,
+  DRONE_COUNT, DRONE_PAD_Z, dronePadX, DRONE_CRUISE,
 } from './layout.js';
 
 const FORKLIFTS = [
@@ -23,6 +24,15 @@ const TRUCKS = [
   { id: 'TRK-2246', carrier: 'Bluewater Logistics' },
   { id: 'TRK-2251', carrier: 'Keystone Haulage' },
 ];
+
+const DRONES = [
+  { id: 'DR-01', model: 'Skydio X10' },
+  { id: 'DR-02', model: 'Skydio X10' },
+  { id: 'DR-03', model: 'DJI Matrice 350' },
+];
+const DRONE_SPEED = 6.5; // m/s cruise
+const DRONE_VERTICAL = 2.4;
+const DRONE_SCAN_SPEED = 2.2;
 
 const PARTNERS = ['Detroit DC', 'Toledo Plant', 'Ann Arbor Hub', 'Flint Supplier Park', 'Lansing Retail DC', 'Grand Rapids FC'];
 
@@ -68,6 +78,12 @@ export class YardSimulation {
     this.trucks = TRUCKS.map((t) => ({
       ...t, dir: 'inbound', status: 'offsite', x: ROAD_X, z: -95, heading: -Math.PI / 2, speed: 0,
       path: [], dock: null, pallets: 0, moved: 0, reserved: 0, eta: 0, timer: 0, shipment: null, finishAt: null,
+    }));
+
+    this.drones = DRONES.slice(0, DRONE_COUNT).map((d, i) => ({
+      ...d, pad: i, x: dronePadX(i), z: DRONE_PAD_Z, y: 0.3, heading: Math.PI / 2, speed: 0,
+      battery: [97, 74, 88][i] ?? 90, state: 'docked', path: [], hold: 0, cooldown: [2, 30, 14][i] ?? 10,
+      mission: null, target: null, scans: 40 + Math.floor(this.rand() * 60), phase: 'docked',
     }));
 
     this.#seedScene();
@@ -221,6 +237,7 @@ export class YardSimulation {
     this.t += dt;
     for (const truck of this.trucks) this.#stepTruck(truck, dt);
     for (const f of this.forklifts) this.#stepForklift(f, dt);
+    for (const d of this.drones) this.#stepDrone(d, dt);
     this.#dispatch();
     for (const d of this.docks) {
       const truck = d.truck && this.trucks.find((t) => t.id === d.truck);
@@ -360,6 +377,107 @@ export class YardSimulation {
     }
   }
 
+  // ---------------------------------------------------------------- drones
+  #planMission(d) {
+    const pad = { x: dronePadX(d.pad), z: DRONE_PAD_Z };
+    const busy = new Set(this.drones.filter((o) => o !== d && o.mission).map((o) => o.mission));
+    const docked = this.trucks.filter((t) => (t.status === 'unloading' || t.status === 'loading')
+      && !this.drones.some((o) => o.target === t.id));
+    const options = [];
+    if (docked.length) options.push('inspection');
+    if (!busy.has('cycle')) options.push('cycle');
+    if (!busy.has('patrol')) options.push('patrol');
+    const kind = options[Math.floor(this.rand() * options.length)] || 'patrol';
+    const pts = [{ ...pad, y: 9, phase: 'takeoff', v: DRONE_VERTICAL }];
+    d.target = null;
+    if (kind === 'patrol') {
+      const y = DRONE_CRUISE;
+      const x0 = ROAD_X + 6; const x1 = BUILDING.x1 + 4; const z0 = BUILDING.z0 - 12; const z1 = BUILDING.z1 + 12;
+      pts.push({ x: x0, z: z0, y, phase: 'transit' });
+      for (const [x, z] of [[x0, z1], [x1, z1], [x1, z0], [x0 + 6, z0]]) pts.push({ x, z, y, phase: 'patrol', scan: 1 });
+    } else if (kind === 'cycle') {
+      const x = LANE_X + 2.4;
+      pts.push({ x, z: dockZ(DOCK_COUNT - 1) + 4, y: 7, phase: 'transit' });
+      for (let i = DOCK_COUNT - 1; i >= 0; i--) pts.push({ x, z: dockZ(i), y: 5.5, phase: 'scan', v: DRONE_SCAN_SPEED, hold: 2.2, scan: 1 });
+      pts.push({ x, z: dockZ(0) - 5, y: 9, phase: 'transit' });
+    } else {
+      const t = docked[Math.floor(this.rand() * docked.length)];
+      d.target = t.id;
+      const cx = TRAILER_REAR_X - 5.3; const z = dockZ(t.dock);
+      pts.push({ x: cx + 3, z, y: 9, phase: 'transit' });
+      pts.push({ x: cx + 2, z, y: 6.8, phase: 'inspect', v: 1.6, hold: 4, scan: 1 });
+      pts.push({ x: cx - 3, z, y: 6.8, phase: 'inspect', v: 1.6, hold: 4, scan: 1 });
+    }
+    pts.push({ ...pad, y: 9, phase: 'return' }, { ...pad, y: 0.3, phase: 'land', v: 1.6 });
+    d.mission = kind;
+    d.path = pts;
+    d.state = 'flying';
+  }
+
+  #stepDrone(d, dt) {
+    if (d.state === 'docked') {
+      d.speed = 0;
+      d.phase = 'docked';
+      d.battery = Math.min(100, d.battery + 0.9 * dt);
+      d.cooldown -= dt;
+      if (d.cooldown <= 0 && d.battery >= 92) this.#planMission(d);
+      return;
+    }
+    d.battery = Math.max(2, d.battery - (d.hold > 0 ? 0.28 : 0.4) * dt);
+    if (d.battery < 22 && !['return', 'land'].includes(d.path[0]?.phase)) {
+      // Low battery: abort the mission and head home.
+      const pad = { x: dronePadX(d.pad), z: DRONE_PAD_Z };
+      d.path = [{ x: d.x, z: d.z, y: Math.max(d.y, 9), phase: 'return' }, { ...pad, y: 9, phase: 'return' }, { ...pad, y: 0.3, phase: 'land', v: 1.6 }];
+      d.hold = 0;
+    }
+    const p = d.path[0];
+    if (!p) {
+      d.state = 'docked'; d.mission = null; d.target = null; d.y = 0.3;
+      d.cooldown = 18 + this.rand() * 30;
+      return;
+    }
+    d.phase = p.phase;
+    if (d.hold > 0) {
+      d.hold -= dt; d.speed = 0;
+      if (d.hold <= 0) d.path.shift();
+      return;
+    }
+    const dx = p.x - d.x; const dz = p.z - d.z; const dy = p.y - d.y;
+    const dist = Math.hypot(dx, dy, dz);
+    const v = p.v || DRONE_SPEED;
+    const step = Math.min(dist, v * dt);
+    if (Math.hypot(dx, dz) > 0.3) d.heading = turnToward(d.heading, headingFrom(dx, dz), dt * 2.5);
+    if (dist > 1e-3) { d.x += (dx / dist) * step; d.y += (dy / dist) * step; d.z += (dz / dist) * step; }
+    d.speed = step / dt;
+    if (step >= dist - 1e-6) {
+      if (p.scan) d.scans += p.scan;
+      if (p.hold) d.hold = p.hold; else d.path.shift();
+    }
+  }
+
+  #droneView(d) {
+    const MISSION = { patrol: 'Yard patrol', cycle: 'Dock cycle count', inspection: 'Trailer inspection' };
+    const STATUS = {
+      docked: d.battery < 92 ? 'Charging' : 'Docked', takeoff: 'Taking off', transit: 'In flight',
+      patrol: 'Patrolling', scan: 'Scanning', inspect: 'Inspecting', return: 'Returning', land: 'Landing',
+    };
+    const truck = d.target && this.trucks.find((t) => t.id === d.target);
+    let task = d.battery < 92 ? `Charging on pad P${d.pad + 1}` : `Ready on pad P${d.pad + 1}`;
+    if (d.state === 'flying') {
+      const m = MISSION[d.mission] || 'Mission';
+      task = d.phase === 'inspect' && truck ? `Inspecting ${truck.id} roof at ${dockLabel(truck.dock)}`
+        : d.phase === 'scan' ? `Scanning dock doors · ${m}`
+          : d.phase === 'return' || d.phase === 'land' ? `Returning to pad P${d.pad + 1}` : m;
+    }
+    return {
+      id: d.id, type: 'drone', name: d.id, model: d.model, status: STATUS[d.phase] || 'In flight', task,
+      mission: d.state === 'flying' ? (MISSION[d.mission] || '') : '', battery: round(d.battery, 1),
+      altitude: round(d.y, 2), speed: round(d.speed * 3.6, 1), x: round(d.x), z: round(d.z), heading: round(d.heading, 3),
+      scansToday: d.scans, pad: `P${d.pad + 1}`, airborne: d.state === 'flying', scanning: d.hold > 0 || d.phase === 'scan' || d.phase === 'inspect',
+      target: truck ? truck.id : '',
+    };
+  }
+
   // -------------------------------------------------------------- snapshot
   snapshot() {
     const now = this.wall();
@@ -384,6 +502,7 @@ export class YardSimulation {
       chargers: this.chargers.map((c) => ({ id: c.id, type: 'charger', name: c.id, index: c.index, busy: !!c.forklift, forklift: c.forklift || '' })),
       forklifts: this.forklifts.map((f) => this.#forkliftView(f)),
       trucks: this.trucks.map((t) => this.#truckView(t, now)),
+      drones: this.drones.map((d) => this.#droneView(d)),
     };
   }
 

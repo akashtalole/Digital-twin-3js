@@ -27,7 +27,7 @@
     </div>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="search" type="search" autocomplete="off" placeholder="Search docks, trucks, forklifts, shipments…" aria-label="Search">
+      <input id="search" type="search" autocomplete="off" placeholder="Search docks, trucks, forklifts, drones, shipments…" aria-label="Search">
       <kbd>/</kbd>
       <div id="search-results" class="popover" role="listbox" hidden></div>
     </div>
@@ -84,6 +84,7 @@
         <button type="button" role="tab" data-tab="dock">Docks <span id="tab-dock"></span></button>
         <button type="button" role="tab" data-tab="forklift" aria-selected="true">Forklifts <span id="tab-forklift"></span></button>
         <button type="button" role="tab" data-tab="truck">Trucks <span id="tab-truck"></span></button>
+        <button type="button" role="tab" data-tab="drone">Drones <span id="tab-drone"></span></button>
       </div>
       <small id="fleet-site"></small>
     </div>
@@ -93,7 +94,7 @@
   <dialog id="connect">
     <form id="connect-form" method="dialog">
       <h2>Connect to ThingsBoard</h2>
-      <p class="hint">The twin subscribes to devices of type <code>forklift</code>, <code>truck</code>, <code>dock</code>, <code>charger</code> and <code>site</code>. <code>tools/tb-simulator.mjs</code> creates them for you.</p>
+      <p class="hint">The twin subscribes to devices of type <code>forklift</code>, <code>truck</code>, <code>drone</code>, <code>dock</code>, <code>charger</code> and <code>site</code>. <code>tools/tb-simulator.mjs</code> creates them for you.</p>
       <label for="tb-host">Server URL</label>
       <input id="tb-host" name="host" type="url" placeholder="https://thingsboard.example.com" required>
       <div class="row">
