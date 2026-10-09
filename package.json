@@ -1,0 +1,13 @@
+{
+  "name": "digital-twin-3js",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live 3D digital twin of a cross-dock warehouse yard, built with three.js and fed by ThingsBoard telemetry.",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "start": "npx --yes http-server -c-1 -p 5173 .",
+    "simulate": "node tools/tb-simulator.mjs"
+  },
+  "license": "MIT"
+}
