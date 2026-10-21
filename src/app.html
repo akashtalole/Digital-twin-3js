@@ -1,0 +1,96 @@
+<div id="app">
+  <canvas id="scene" aria-label="3D view of the cross-dock yard"></canvas>
+  <div id="labels" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 29 8.5v15L16 30 3 23.5v-15Z" fill="var(--accent)"/><path d="M16 2 29 8.5 16 15 3 8.5Z" fill="#fff" opacity=".35"/></svg>
+      <span>YardTwin</span>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" autocomplete="off" placeholder="Search docks, trucks, forklifts, drones, shipments…" aria-label="Search">
+      <kbd>/</kbd>
+      <div id="search-results" class="popover" role="listbox" hidden></div>
+    </div>
+    <button class="site" id="site-btn" type="button" title="Fly to site overview">
+      <span class="site-code" id="site-code">WH-04</span>
+      <span class="site-text"><b id="site-name">Southfield Cross-Dock</b><small id="site-meta">–</small></span>
+    </button>
+    <button class="live" id="live-btn" type="button" title="Data source">
+      <i class="dot"></i><span id="live-label">Demo</span><span id="clock" class="num">--:--</span>
+    </button>
+    <div class="bell-wrap">
+      <button class="icon-btn" id="bell-btn" type="button" aria-label="Alerts">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+        <i id="bell-count" hidden></i>
+      </button>
+      <div id="alerts" class="popover alerts" hidden></div>
+    </div>
+    <div class="user">
+      <span class="avatar" id="avatar">DM</span>
+      <span class="user-text"><b id="user-name">Demo mode</b><small id="user-role">Simulated telemetry</small></span>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Site KPIs">
+    <article class="kpi">
+      <span class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 3 21 7.5v9L12 21 3 16.5v-9Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg></span>
+      <div><small>Stock on hand</small><p><b id="kpi-stock" class="num">–</b><span id="kpi-stock-d" class="delta"></span></p><small id="kpi-stock-sub">pallets</small></div>
+    </article>
+    <article class="kpi">
+      <span class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 9h4l3 3.5V16h-7z"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg></span>
+      <div><small>Trucks on site</small><p><b id="kpi-trucks" class="num">–</b><span id="kpi-trucks-d" class="delta"></span></p><small id="kpi-trucks-sub">inbound</small></div>
+    </article>
+    <article class="kpi">
+      <span class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <div><small>On-time delivery</small><p><b id="kpi-otd" class="num">–</b><span id="kpi-otd-d" class="delta"></span></p><small id="kpi-otd-sub">last 30 days</small></div>
+    </article>
+  </section>
+
+  <nav class="map-tools" aria-label="Camera">
+    <button type="button" data-cam="in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button type="button" data-cam="out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <button type="button" data-cam="left" aria-label="Rotate left"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
+    <button type="button" data-cam="right" aria-label="Rotate right"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
+    <button type="button" data-cam="home" aria-label="Reset view"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z"/></svg></button>
+  </nav>
+
+  <aside class="detail panel" id="detail" hidden aria-live="polite"></aside>
+
+  <section class="shipment panel" id="shipment" aria-label="Shipment tracking"></section>
+
+  <section class="fleet panel" aria-label="Fleet">
+    <div class="fleet-head">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="dock">Docks <span id="tab-dock"></span></button>
+        <button type="button" role="tab" data-tab="forklift" aria-selected="true">Forklifts <span id="tab-forklift"></span></button>
+        <button type="button" role="tab" data-tab="truck">Trucks <span id="tab-truck"></span></button>
+        <button type="button" role="tab" data-tab="drone">Drones <span id="tab-drone"></span></button>
+      </div>
+      <small id="fleet-site"></small>
+    </div>
+    <div id="fleet-list" class="fleet-list"></div>
+  </section>
+
+  <dialog id="connect">
+    <form id="connect-form" method="dialog">
+      <h2>Connect to ThingsBoard</h2>
+      <p class="hint">The twin subscribes to devices of type <code>forklift</code>, <code>truck</code>, <code>drone</code>, <code>dock</code>, <code>charger</code> and <code>site</code>. <code>tools/tb-simulator.mjs</code> creates them for you.</p>
+      <label for="tb-host">Server URL</label>
+      <input id="tb-host" name="host" type="url" placeholder="https://thingsboard.example.com" required>
+      <div class="row">
+        <div><label for="tb-user">Username</label><input id="tb-user" name="username" type="email" autocomplete="username" placeholder="tenant@thingsboard.org"></div>
+        <div><label for="tb-pass">Password</label><input id="tb-pass" name="password" type="password" autocomplete="current-password"></div>
+      </div>
+      <label for="tb-token">Or paste a JWT token</label>
+      <input id="tb-token" name="token" type="password" placeholder="eyJhbGciOi…" autocomplete="off">
+      <p id="connect-error" class="error" hidden></p>
+      <div class="actions">
+        <button type="button" id="use-demo" class="ghost">Use demo data</button>
+        <button type="button" id="connect-cancel" class="ghost">Cancel</button>
+        <button type="submit" id="connect-submit" class="primary">Connect</button>
+      </div>
+    </form>
+  </dialog>
+</div>
